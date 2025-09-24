@@ -1,0 +1,1 @@
+Schreibe keine Kommentare in den Code mit Ausnahme von (given, when, then) in Tests.

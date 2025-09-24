@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Kafkatool</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 2rem; }
+        h1 { margin-bottom: 0.5rem; }
+        #toolbar { margin-bottom: 0.5rem; }
+        #messages { margin-top: 1rem; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+        .row { display: grid; grid-template-columns: 20% 20% 50% 10%; gap: 0.5rem; align-items: start; padding: 4px 0; border-bottom: 1px solid #eee; }
+        .header { font-weight: bold; background: #f8f8f8; border-top: 1px solid #eee; }
+        .cell { white-space: pre-wrap; overflow-wrap: anywhere; }
+        .btn { cursor: pointer; background: transparent; border: 1px solid #ccc; border-radius: 4px; padding: 2px 6px; }
+    </style>
+</head>
+<body>
+<h1>Kafkatool</h1>
+<div id="toolbar"><button id="clearAll" class="btn">clear all</button></div>
+<div id="messages"></div>
+<script>
+    const messages = [];
+    const container = document.getElementById('messages');
+    const clearAllBtn = document.getElementById('clearAll');
+
+    function createRow(c1, c2, c3, c4, header = false) {
+        const row = document.createElement('div');
+        row.className = header ? 'row header' : 'row';
+        const a = document.createElement('div'); a.className = 'cell'; a.textContent = c1 || '';
+        const b = document.createElement('div'); b.className = 'cell'; b.textContent = c2 || '';
+        const c = document.createElement('div'); c.className = 'cell'; c.textContent = c3 || '';
+        const d = document.createElement('div'); d.className = 'cell';
+        if (header) {
+            d.textContent = c4 || '';
+        } else {
+            const btn = document.createElement('button');
+            btn.className = 'btn';
+            btn.textContent = 'x';
+            d.appendChild(btn);
+        }
+        row.appendChild(a);
+        row.appendChild(b);
+        row.appendChild(c);
+        row.appendChild(d);
+        return row;
+    }
+
+    function render() {
+        container.innerHTML = '';
+        container.appendChild(createRow('Topic', 'Header / Timestamp', 'Payload', 'Remove', true));
+        for (let i = 0; i < messages.length; i++) {
+            const m = messages[i] || {};
+            const headerWithTs = (m.headerData || '') + (m.timestamp ? ('\n' + m.timestamp) : '');
+            const row = createRow(m.topicName, headerWithTs, m.payload, '');
+            const btn = row.lastChild.querySelector('button');
+            if (btn) {
+                btn.addEventListener('click', () => {
+                    messages.splice(i, 1);
+                    render();
+                });
+            }
+            container.appendChild(row);
+        }
+    }
+
+    if (clearAllBtn) {
+        clearAllBtn.addEventListener('click', () => {
+            messages.length = 0;
+            render();
+        });
+    }
+
+    const es = new EventSource('/sse/messages');
+    es.addEventListener('message', function (e) {
+        try {
+            const obj = JSON.parse(e.data);
+            messages.push(obj);
+        } catch (err) {
+            messages.push({ topicName: '', headerData: '', payload: e.data });
+        }
+        render();
+    });
+</script>
+</body>
+</html>
