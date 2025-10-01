@@ -19,6 +19,8 @@
 <h1>Kafkatool</h1>
 <div id="toolbar"><button id="clearAll" class="btn">clear all</button></div>
 <div id="messages"></div>
+<script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
 <script>
     const messages = [];
     const container = document.getElementById('messages');
@@ -71,16 +73,24 @@
         });
     }
 
-    const es = new EventSource('/sse/messages');
-    es.addEventListener('message', function (e) {
-        try {
-            const obj = JSON.parse(e.data);
-            messages.push(obj);
-        } catch (err) {
-            messages.push({ topicName: '', headerData: '', payload: e.data });
-        }
-        render();
-    });
+    function connectWs() {
+        const sock = new SockJS('/ws');
+        const client = Stomp.over(sock);
+        client.debug = null;
+        client.connect({}, () => {
+            client.subscribe('/topic/messages', (msg) => {
+                try {
+                    const obj = JSON.parse(msg.body);
+                    messages.push(obj);
+                } catch (e) {
+                    messages.push({ topicName: '', headerData: '', payload: msg.body });
+                }
+                render();
+            });
+        });
+    }
+
+    connectWs();
 </script>
 </body>
 </html>
