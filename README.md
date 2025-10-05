@@ -10,3 +10,5 @@ Idea: Observe all messages on a local kafka broker while developing
 - Configure ports in application.yml
 - Start KafkatoolApplication
 - Open http://localhost:8080
+
+![Kafkatool Screenshot](docs/screenshot.png)
