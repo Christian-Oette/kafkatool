@@ -1,6 +1,7 @@
 package com.christianoette.kafkatool.service;
 
 import com.christianoette.kafkatool.web.MessageReceivedEvent;
+import lombok.Getter;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -11,7 +12,6 @@ import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
-import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
 import java.time.Instant;
@@ -35,6 +35,7 @@ public class TopicReadService {
     private final KafkaProperties kafkaProperties;
     private final ApplicationEventPublisher events;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    @Getter
     private volatile boolean running = false;
     private KafkaConsumer<String, String> consumer;
 
@@ -59,8 +60,10 @@ public class TopicReadService {
         }
     }
 
-    @PostConstruct
-    void startReadingAllTopics() {
+    public synchronized boolean connect() {
+        if (running) {
+            return false;
+        }
         Properties props = new Properties();
         props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, String.join(",", kafkaProperties.getBootstrapServers()));
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
@@ -69,6 +72,8 @@ public class TopicReadService {
                 ? kafkaProperties.getConsumer().getGroupId()
                 : "kafkatool-reader-" + UUID.randomUUID());
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+        props.put(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, "300000");
+        props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, "500");
         if (kafkaProperties.getProperties() != null) {
             kafkaProperties.getProperties().forEach(props::put);
         }
@@ -90,15 +95,21 @@ public class TopicReadService {
                 });
             }
         });
+        return true;
     }
 
-    @PreDestroy
-    void stopReadingAllTopics() {
+    public synchronized void disconnect() {
         running = false;
         if (consumer != null) {
             try { consumer.wakeup(); } catch (Exception ignored) {}
             try { consumer.close(Duration.ofSeconds(2)); } catch (Exception ignored) {}
+            consumer = null;
         }
+    }
+
+    @PreDestroy
+    void stopReadingAllTopics() {
+        disconnect();
         executor.shutdownNow();
     }
 }

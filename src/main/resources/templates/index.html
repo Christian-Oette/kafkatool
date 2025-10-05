@@ -5,19 +5,35 @@
     <title>Kafkatool</title>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <style>
+        :root { --btn-font-size: 14px; }
         body { font-family: Arial, sans-serif; margin: 2rem; }
         h1 { margin-bottom: 0.5rem; }
-        #toolbar { margin-bottom: 0.5rem; }
+        #toolbar { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+        #toolbar .left { display: flex; align-items: center; gap: 0.5rem; }
+        #toolbar .status { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: var(--btn-font-size); }
+        #toolbar .status .dot { width: 10px; height: 10px; border-radius: 50%; background: #999; display: inline-block; }
+        #toolbar .status.connected .dot { background: #2ecc71; }
+        #toolbar .status.disconnected .dot { background: #e74c3c; }
         #messages { margin-top: 1rem; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
         .row { display: grid; grid-template-columns: 20% 20% 50% 10%; gap: 0.5rem; align-items: start; padding: 4px 0; border-bottom: 1px solid #eee; }
         .header { font-weight: bold; background: #f8f8f8; border-top: 1px solid #eee; }
         .cell { white-space: pre-wrap; overflow-wrap: anywhere; }
-        .btn { cursor: pointer; background: transparent; border: 1px solid #ccc; border-radius: 4px; padding: 2px 6px; }
+        .btn { cursor: pointer; background: transparent; border: 1px solid #ccc; border-radius: 4px; padding: 2px 6px; font-size: var(--btn-font-size); }
     </style>
 </head>
 <body>
 <h1>Kafkatool</h1>
-<div id="toolbar"><button id="clearAll" class="btn">clear all</button></div>
+<div id="toolbar">
+    <div class="left">
+        <button id="connectBtn" class="btn">connect</button>
+        <button id="disconnectBtn" class="btn" disabled>disconnect</button>
+        <button id="clearAll" class="btn">clear all</button>
+    </div>
+    <div id="status" class="status disconnected" aria-live="polite">
+        <span class="dot" aria-hidden="true"></span>
+        <span class="label">disconnected</span>
+    </div>
+</div>
 <div id="messages"></div>
 <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
@@ -25,6 +41,9 @@
     const messages = [];
     const container = document.getElementById('messages');
     const clearAllBtn = document.getElementById('clearAll');
+    const connectBtn = document.getElementById('connectBtn');
+    const disconnectBtn = document.getElementById('disconnectBtn');
+    const statusEl = document.getElementById('status');
 
     function createRow(c1, c2, c3, c4, header = false) {
         const row = document.createElement('div');
@@ -53,7 +72,9 @@
         container.appendChild(createRow('Topic', 'Header / Timestamp', 'Payload', 'Remove', true));
         for (let i = 0; i < messages.length; i++) {
             const m = messages[i] || {};
-            const headerWithTs = (m.headerData || '') + (m.timestamp ? ('\n' + m.timestamp) : '');
+            const header = (m.headerData || '');
+            const truncatedHeader = header.length > 500 ? header.slice(0, 500) + '...' : header;
+            const headerWithTs = truncatedHeader + (m.timestamp ? ('\n' + m.timestamp) : '');
             const row = createRow(m.topicName, headerWithTs, m.payload, '');
             const btn = row.lastChild.querySelector('button');
             if (btn) {
@@ -73,6 +94,51 @@
         });
     }
 
+    function setUi(connected) {
+        if (connectBtn) connectBtn.disabled = !!connected;
+        if (disconnectBtn) disconnectBtn.disabled = !connected;
+        if (statusEl) {
+            const isConn = !!connected;
+            statusEl.classList.toggle('connected', isConn);
+            statusEl.classList.toggle('disconnected', !isConn);
+            const label = statusEl.querySelector('.label');
+            if (label) label.textContent = isConn ? 'connected' : 'disconnected';
+        }
+    }
+
+    async function refreshStatus() {
+        try {
+            const res = await fetch('/api/status');
+            const data = await res.json();
+            setUi(!!data.connected);
+        } catch (e) {
+            setUi(false);
+        }
+    }
+
+    async function doConnect() {
+        try {
+            const res = await fetch('/api/connect', { method: 'POST' });
+            const data = await res.json();
+            setUi(!!data.connected);
+        } catch (e) {
+            setUi(false);
+        }
+    }
+
+    async function doDisconnect() {
+        try {
+            const res = await fetch('/api/disconnect', { method: 'POST' });
+            const data = await res.json();
+            setUi(!!data.connected);
+        } catch (e) {
+            setUi(false);
+        }
+    }
+
+    if (connectBtn) connectBtn.addEventListener('click', doConnect);
+    if (disconnectBtn) disconnectBtn.addEventListener('click', doDisconnect);
+
     function connectWs() {
         const sock = new SockJS('/ws');
         const client = Stomp.over(sock);
@@ -90,6 +156,7 @@
         });
     }
 
+    refreshStatus();
     connectWs();
 </script>
 </body>
